@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""Browse Claude Code session trees under ~/.claude/projects in the browser.
+
+Serves a searchable index of every session (grouped by project) and renders any
+session on click by reusing ~/bin/session-view's rendering engine.
+
+Usage: session-explorer [--port N] [--no-open]
+"""
+
+import argparse
+import html
+import json
+import os
+import re
+import sys
+import time
+import urllib.parse
+import webbrowser
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+
+# Sessions live here; override with CLAUDE_PROJECTS if your setup differs.
+PROJECTS = Path(os.environ.get("CLAUDE_PROJECTS",
+                               Path.home() / ".claude" / "projects"))
+# session-view ships alongside this script; fall back to PATH / ~/bin.
+_here = Path(__file__).resolve().parent
+SV_PATH = next((p for p in (_here / "session-view",
+                            Path.home() / "bin" / "session-view")
+                if p.is_file()), _here / "session-view")
+sv = SourceFileLoader("session_view", str(SV_PATH)).load_module()
+
+# Map Claude Code agent-color names to display colors (most are valid CSS names).
+COLOR = {
+    "yellow": "#e0a800", "orange": "#d2691e", "red": "#c0392b", "pink": "#d6336c",
+    "purple": "#7c3aed", "blue": "#2f6feb", "cyan": "#0891b2", "green": "#1f8a4c",
+    "gray": "#6a6a6a", "grey": "#6a6a6a",
+}
+
+INDEX_CSS = """
+:root{--bg:#f6f6f2;--text:#1c1c1c;--muted:#6a6a6a;--border:#e3e3df;--card:#fff;
+--font:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font)}
+header.topbar{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);
+padding:10px 20px;display:flex;gap:14px;align-items:baseline}
+header .name{font-weight:600}
+header .stats{color:var(--muted);font-size:13px}
+header .spacer{flex:1}
+header input{font:inherit;padding:5px 10px;border:1px solid var(--border);border-radius:5px;width:300px}
+header select{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:5px}
+main{max-width:1100px;margin:0 auto;padding:10px 20px 60px}
+.proj{margin:7px 0;border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden}
+.proj>summary{cursor:pointer;padding:6px 14px;font-weight:600;background:#fbfbf8;
+display:flex;align-items:baseline;gap:10px;list-style:none}
+.proj>summary::-webkit-details-marker{display:none}
+.proj>summary .path{font-family:var(--mono);font-size:13px}
+.proj>summary .count{color:var(--muted);font-size:12px;font-weight:400}
+.row{display:flex;align-items:center;gap:12px;padding:4px 14px;border-top:1px solid var(--border);
+text-decoration:none;color:inherit}
+.row:hover{background:#eef3ff}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:#bbb}
+.row .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .title .sub{color:var(--muted);font-size:12px}
+.row .badge{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
+.row .branch{color:#7c3aed}
+.row .age{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none;width:48px;text-align:right}
+.more{display:block;width:100%;text-align:left;padding:4px 14px;border:0;border-top:1px solid var(--border);
+background:#fbfbf8;color:#2f6feb;font:inherit;font-size:12px;cursor:pointer}
+.more:hover{background:#eef3ff}
+.proj:not(.show-all) .row.over{display:none}
+.hidden{display:none!important}
+.empty{color:var(--muted);padding:40px;text-align:center}
+"""
+
+
+def esc(s):
+    return html.escape("" if s is None else str(s), quote=True)
+
+
+def rel_age(ts):
+    if not ts:
+        return ""
+    d = time.time() - ts
+    if d < 90:
+        return "now"
+    for unit, sec in (("d", 86400), ("h", 3600), ("m", 60)):
+        if d >= sec:
+            return f"{int(d // sec)}{unit}"
+    return "now"
+
+
+def fsize(n):
+    for unit in ("B", "K", "M"):
+        if n < 1024 or unit == "M":
+            return f"{n:.0f}{unit}" if unit == "B" else f"{n / 1024:.0f}{unit}"
+        n /= 1024
+
+
+def first_human_prompt(text):
+    """Strip command/reminder wrappers; return first real human line or ''."""
+    if not isinstance(text, str):
+        return ""
+    cmd = re.search(r"<command-name>\s*(.*?)\s*</command-name>", text)
+    args = re.search(r"<command-args>\s*(.*?)\s*</command-args>", text)
+    if cmd:
+        c = cmd.group(1).strip()
+        a = (args.group(1).strip() if args else "")
+        return (c + (" " + a if a else "")).strip()
+    t = re.sub(r"<(system-reminder|command-[^>]*|local-command-[^>]*)>.*?</\1>", "", text, flags=re.S)
+    t = re.sub(r"<[^>]+>", "", t).strip()
+    return t
+
+
+_cache = {}  # path -> (mtime, meta)
+
+
+def scan_session(path):
+    st = path.stat()
+    hit = _cache.get(str(path))
+    if hit and hit[0] == st.st_mtime:
+        return hit[1]
+
+    meta = {
+        "file": str(path), "name": path.stem, "size": st.st_size,
+        "cwd": None, "branch": None, "color": None, "version": None,
+        "custom_title": None, "ai_title": None, "last_prompt": None,
+        "first_prompt": "", "msgs": 0, "last_ts": st.st_mtime, "branched": False,
+    }
+    children = {}
+    last_iso = None
+    try:
+        with path.open() as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = d.get("type")
+                if t == "ai-title":
+                    meta["ai_title"] = d.get("aiTitle")
+                elif t == "custom-title":
+                    meta["custom_title"] = d.get("customTitle")
+                elif t == "agent-color":
+                    meta["color"] = d.get("agentColor")
+                elif t == "last-prompt":
+                    meta["last_prompt"] = d.get("lastPrompt")
+                elif t in ("user", "assistant"):
+                    meta["msgs"] += 1
+                    if not meta["cwd"] and d.get("cwd"):
+                        meta["cwd"] = d.get("cwd")
+                        meta["branch"] = d.get("gitBranch")
+                        meta["version"] = d.get("version")
+                    p = d.get("parentUuid")
+                    if p:
+                        children[p] = children.get(p, 0) + 1
+                    if t == "user" and not meta["first_prompt"]:
+                        c = d.get("message", {}).get("content")
+                        if isinstance(c, list):
+                            c = " ".join(b.get("text", "") for b in c
+                                         if isinstance(b, dict) and b.get("type") == "text")
+                        meta["first_prompt"] = first_human_prompt(c)
+                    if d.get("timestamp"):
+                        last_iso = d["timestamp"]
+    except OSError:
+        return meta
+
+    meta["branched"] = any(v > 1 for v in children.values())
+    if last_iso:
+        try:
+            meta["last_ts"] = datetime.fromisoformat(
+                last_iso.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    _cache[str(path)] = (st.st_mtime, meta)
+    return meta
+
+
+def title_for(m):
+    return (m["custom_title"] or m["ai_title"] or m["first_prompt"]
+            or m["last_prompt"] or m["name"][:8])
+
+
+def scan_all():
+    projects = []
+    if not PROJECTS.exists():
+        return projects
+    for pdir in PROJECTS.iterdir():
+        if not pdir.is_dir():
+            continue
+        sessions = [scan_session(f) for f in pdir.glob("*.jsonl")]
+        if not sessions:
+            continue
+        sessions.sort(key=lambda m: m["last_ts"], reverse=True)
+        cwd = next((s["cwd"] for s in sessions if s["cwd"]), None)
+        label = cwd or ("/" + pdir.name.lstrip("-").replace("-", "/"))
+        projects.append({
+            "label": label, "sessions": sessions,
+            "last_ts": sessions[0]["last_ts"],
+        })
+    projects.sort(key=lambda p: p["last_ts"], reverse=True)
+    return projects
+
+
+def render_index():
+    projects = scan_all()
+    nsess = sum(len(p["sessions"]) for p in projects)
+    rows_html = []
+    for pi, p in enumerate(projects):
+        items = []
+        for si, m in enumerate(p["sessions"]):
+            over = " over" if si >= 5 else ""
+            color = COLOR.get((m["color"] or "").lower(), m["color"] or "#bbb")
+            title = title_for(m)
+            tw = ("<strong>", "</strong>") if m["custom_title"] else ("", "")
+            sub = m["last_prompt"] if (m["last_prompt"] and m["last_prompt"] != title) else ""
+            branch = f'<span class="badge branch" title="has branches">⑂</span>' if m["branched"] else ""
+            gb = m["branch"]
+            gbadge = f'<span class="badge" title="git branch">{esc(gb)}</span>' if gb and gb != "HEAD" else ""
+            href = "/s?f=" + urllib.parse.quote(m["file"])
+            search = esc((title + " " + (sub or "") + " " + m["name"] + " " + p["label"]).lower())
+            items.append(
+                f'<a class="row{over}" href="{href}" target="_blank" data-s="{search}">'
+                f'<span class="dot" style="background:{esc(color)}"></span>'
+                f'<span class="title">{tw[0]}{esc(title)}{tw[1]}'
+                + (f' <span class="sub">— {esc(sub[:80])}</span>' if sub else "")
+                + "</span>"
+                f'{branch}{gbadge}'
+                f'<span class="badge">{m["msgs"]} msg</span>'
+                f'<span class="badge">{esc(fsize(m["size"]))}</span>'
+                f'<span class="age">{esc(rel_age(m["last_ts"]))}</span>'
+                "</a>"
+            )
+        open_attr = " open" if pi == 0 else ""
+        n = len(p["sessions"])
+        more = (f'<button class="more" onclick="toggleMore(this)" '
+                f'data-n="{n - 5}">▾ show {n - 5} more</button>') if n > 5 else ""
+        rows_html.append(
+            f'<details class="proj"{open_attr} data-s="{esc(p["label"].lower())}">'
+            f'<summary><span class="path">{esc(p["label"])}</span>'
+            f'<span class="count">{n} sessions</span></summary>'
+            + "".join(items) + more + "</details>"
+        )
+    body = "\n".join(rows_html) or '<div class="empty">No sessions found.</div>'
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<title>session explorer</title><style>{INDEX_CSS}</style></head><body>
+<header class="topbar">
+  <span class="name">session explorer</span>
+  <span class="stats">{len(projects)} projects • {nsess} sessions</span>
+  <span class="spacer"></span>
+  <input id="q" placeholder="filter sessions…" autofocus>
+  <button onclick="document.querySelectorAll('.proj').forEach(d=>d.open=true)">expand</button>
+  <button onclick="document.querySelectorAll('.proj').forEach(d=>d.open=false)">collapse</button>
+</header>
+<main>{body}</main>
+<script>
+const q=document.getElementById('q');
+function setMore(p){{
+  const b=p.querySelector('.more'); if(!b)return;
+  const all=p.classList.contains('show-all');
+  b.textContent=all?'▴ show less':('▾ show '+b.dataset.n+' more');
+}}
+function toggleMore(b){{
+  const p=b.closest('.proj');
+  p.classList.toggle('show-all');
+  p.dataset.manual=p.classList.contains('show-all')?'1':'';
+  setMore(p);
+}}
+q.addEventListener('input',()=>{{
+  const t=q.value.trim().toLowerCase();
+  document.querySelectorAll('.proj').forEach(p=>{{
+    let any=false;
+    p.querySelectorAll('.row').forEach(r=>{{
+      const hit=!t||r.dataset.s.includes(t);
+      r.classList.toggle('hidden',!hit); if(hit)any=true;
+    }});
+    // while filtering, lift the 5-row cap so all matches show
+    p.classList.toggle('show-all', t?true:(p.dataset.manual==='1'));
+    setMore(p);
+    const phit=any||(!t)||p.dataset.s.includes(t);
+    p.classList.toggle('hidden',!phit);
+    if(t&&any)p.open=true;
+  }});
+}});
+</script>
+</body></html>"""
+
+
+def render_session(path):
+    p = Path(path)
+    if not p.is_file() or p.suffix != ".jsonl" or PROJECTS not in p.resolve().parents:
+        return None
+    entries = []
+    with p.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    rendered, turns, tools = sv.render_entries(entries)
+    meta = scan_session(p)
+    title = title_for(meta)
+    backbar = (
+        '<header class="topbar">'
+        '<a href="/" style="text-decoration:none;font-size:13px">&larr; all sessions</a>'
+        f'<span class="name">{esc(title)}</span>'
+        f'<span class="stats">{turns} turns • {tools} tools • {esc(meta.get("cwd") or "")}</span>'
+        '<span class="spacer"></span>'
+        "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=true)\">expand all</button>"
+        "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=false)\">collapse all</button>"
+        "<button onclick=\"document.body.classList.toggle('summary')\">summary</button>"
+        "</header>"
+    )
+    return (
+        f'<!doctype html><html><head><meta charset="utf-8"><title>{esc(title)}</title>'
+        f"<style>{sv.CSS}</style></head><body>{backbar}"
+        f'<main>{chr(10).join(rendered)}</main></body></html>'
+    )
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, body, code=200, ctype="text/html; charset=utf-8"):
+        data = body.encode("utf-8") if isinstance(body, str) else body
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        u = urllib.parse.urlparse(self.path)
+        try:
+            if u.path == "/":
+                self._send(render_index())
+            elif u.path == "/s":
+                f = urllib.parse.parse_qs(u.query).get("f", [""])[0]
+                page = render_session(f)
+                if page is None:
+                    self._send("not found", 404, "text/plain")
+                else:
+                    self._send(page)
+            else:
+                self._send("not found", 404, "text/plain")
+        except BrokenPipeError:
+            pass
+        except Exception as e:  # noqa: BLE001 — keep server alive, report in browser
+            self._send(f"<pre>error: {esc(repr(e))}</pre>", 500)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=0, help="port (default: auto)")
+    ap.add_argument("--no-open", action="store_true")
+    args = ap.parse_args()
+
+    if not PROJECTS.exists():
+        print(f"no projects dir at {PROJECTS}", file=sys.stderr)
+        sys.exit(1)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    port = srv.server_address[1]
+    url = f"http://127.0.0.1:{port}/"
+    print(f"session-explorer → {url}  (ctrl-c to stop)", file=sys.stderr)
+    if not args.no_open:
+        webbrowser.open(url)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nbye", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

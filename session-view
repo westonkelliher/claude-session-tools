@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""Render a Claude Code session.jsonl as a self-contained HTML viewer.
+
+Usage: session-view <session.jsonl> [-o out.html] [--open]
+       (defaults: out = <jsonl-stem>.html next to the input; --open launches browser)
+"""
+
+import argparse
+import html
+import json
+import re
+import sys
+import webbrowser
+from pathlib import Path
+
+
+SKIP_TYPES = {"queue-operation", "ai-title", "last-prompt", "attachment", "summary"}
+
+CSS = """
+:root {
+  --bg: #f6f6f2;
+  --text: #1c1c1c;
+  --muted: #6a6a6a;
+  --border: #e3e3df;
+  --user-bg: #dbe8ff;
+  --user-edge: #2f6feb;
+  --asst-bg: #d8efdf;
+  --asst-edge: #1f8a4c;
+  --thinking-bg: #ebebe8;
+  --tooluse-bg: #fbe8c8;
+  --tooluse-edge: #c97a17;
+  --toolresult-bg: #e6e9ef;
+  --toolresult-edge: #5c6b85;
+  --error-bg: #fcdcd6;
+  --error-edge: #c0392b;
+  --code-bg: #2b2b2b;
+  --code-fg: #f1f1f1;
+  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); }
+header.topbar {
+  position: sticky; top: 0; z-index: 10;
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 10px 20px; display: flex; gap: 18px; align-items: baseline;
+}
+header .name { font-weight: 600; }
+header .stats { color: var(--muted); font-size: 13px; }
+header .spacer { flex: 1; }
+header button {
+  font: inherit; font-size: 12px;
+  background: #fff; border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 10px; cursor: pointer;
+}
+header button:hover { background: #f0f0eb; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+
+.card {
+  border-radius: 6px;
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-left-width: 5px;
+}
+.card-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; margin-bottom: 6px;
+}
+.role { text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; font-size: 11px; }
+.ts { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+
+.card.user { background: var(--user-bg); border-left-color: var(--user-edge); }
+.card.user .role { color: var(--user-edge); }
+.card.assistant { background: var(--asst-bg); border-left-color: var(--asst-edge); }
+.card.assistant .role { color: var(--asst-edge); }
+.card.tooluse { background: var(--tooluse-bg); border-left-color: var(--tooluse-edge); }
+.card.tooluse .role { color: var(--tooluse-edge); }
+.card.toolresult { background: var(--toolresult-bg); border-left-color: var(--toolresult-edge); }
+.card.toolresult .role { color: var(--toolresult-edge); }
+.card.toolresult.error { background: var(--error-bg); border-left-color: var(--error-edge); }
+.card.toolresult.error .role { color: var(--error-edge); }
+.card.tool { background: var(--tooluse-bg); border-left-color: var(--tooluse-edge); }
+.card.tool .role { color: var(--tooluse-edge); }
+.card.tool .toolhead { font-family: var(--mono); font-size: 13px; margin-bottom: 6px; word-break: break-all; }
+.card.tool .toolhead .name {
+  display: inline-block; background: var(--tooluse-edge); color: #fff;
+  font-size: 12px; padding: 1px 7px; border-radius: 3px; margin-right: 8px;
+  font-weight: 600;
+}
+.card.tool .toolhead .name.tool-bash         { background: #2f4858; }
+.card.tool .toolhead .name.tool-write        { background: #1f8a4c; }
+.card.tool .toolhead .name.tool-edit         { background: #c97a17; }
+.card.tool .toolhead .name.tool-read         { background: #4a7da8; }
+.card.tool .toolhead .name.tool-notebookedit { background: #8b5cf6; }
+.card.tool .toolhead .name.tool-glob         { background: #7c3aed; }
+.card.tool .toolhead .name.tool-grep         { background: #6d28d9; }
+.card.tool .toolhead .name.tool-webfetch     { background: #0ea5e9; }
+.card.tool .toolhead .name.tool-websearch    { background: #0284c7; }
+.card.tool .toolhead .name.tool-task         { background: #db2777; }
+.card.tool .toolhead .name.tool-todowrite    { background: #475569; }
+.card.tool .toolhead .name.tool-taskcreate   { background: #db2777; }
+.card.tool .toolhead .name.tool-taskupdate   { background: #be185d; }
+.card.tool .toolhead .toolsummary { color: #5b4517; }
+.card.tool .toolhead .toolsummary strong {
+  background: var(--tooluse-edge);
+  color: #fff;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+.card.tool .toolhead .name.tool-write + .toolsummary strong        { background: #1f8a4c; }
+.card.tool .toolhead .name.tool-edit + .toolsummary strong         { background: #c97a17; }
+.card.tool .toolhead .name.tool-read + .toolsummary strong         { background: #4a7da8; }
+.card.tool .toolhead .name.tool-notebookedit + .toolsummary strong { background: #8b5cf6; }
+.card.tool .toolhead .name.tool-bash + .toolsummary { color: #111; font-weight: 600; }
+.card.tool details { background: rgba(255,255,255,0.4); border-radius: 4px; padding: 4px 8px; margin: 4px 0; }
+.card.tool details > summary { cursor: pointer; font-family: var(--mono); font-size: 12px; color: #444; }
+.card.tool details.result { background: rgba(92,107,133,0.12); }
+.card.tool details.result.error { background: var(--error-bg); }
+.card.tool details.result.error > summary { color: var(--error-edge); font-weight: 600; }
+.pending { color: var(--error-edge); font-style: italic; }
+
+.md p { margin: 6px 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: 10px 0 4px; }
+.md h1 { font-size: 18px; }
+.md h2 { font-size: 16px; }
+.md h3 { font-size: 14px; }
+.md h4 { font-size: 13px; }
+.md ul, .md ol { margin: 4px 0; padding-left: 22px; }
+.md li { margin: 2px 0; }
+.md a { color: #1657c0; }
+.md code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-family: var(--mono); font-size: 12.5px; }
+.md pre { background: var(--code-bg); color: var(--code-fg); padding: 10px 12px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+.md pre code { background: transparent; padding: 0; color: inherit; }
+
+.thinking {
+  background: var(--thinking-bg);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  color: #444;
+  font-style: italic;
+}
+.thinking > summary { cursor: pointer; font-size: 12px; color: var(--muted); font-style: normal; }
+.thinking .body { white-space: pre-wrap; margin-top: 6px; font-family: var(--mono); font-size: 12.5px; }
+
+.tooluse .name {
+  display: inline-block;
+  background: var(--tooluse-edge);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  margin-right: 8px;
+}
+.tooluse details > summary { cursor: pointer; font-family: var(--mono); font-size: 12px; color: #5b4517; word-break: break-all; }
+.tooluse .body { margin-top: 8px; }
+
+.toolresult details > summary { cursor: pointer; font-family: var(--mono); font-size: 12px; }
+
+pre.raw {
+  background: var(--code-bg); color: var(--code-fg);
+  padding: 8px 10px; border-radius: 4px;
+  overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  margin: 6px 0; font-family: var(--mono); font-size: 12.5px;
+}
+.kv { font-family: var(--mono); font-size: 12px; color: #333; margin: 2px 0; }
+.kv b { color: #111; }
+.truncated { color: var(--muted); font-style: italic; font-size: 12px; }
+details { margin: 4px 0; }
+details > summary { user-select: none; }
+
+/* Summary (compact) mode */
+body.summary main { padding-top: 12px; }
+body.summary .card { margin: 0; padding: 2px 8px; border-radius: 0; border-top-width: 0; border-bottom-width: 0; border-left-width: 4px; }
+body.summary .card + .card { border-top: 1px solid rgba(0,0,0,0.04); }
+body.summary .card-header { display: none; }
+body.summary .md p { margin: 2px 0; }
+body.summary .thinking { padding: 2px 8px; margin: 2px 0; }
+body.summary .card.tool details { display: none; }
+body.summary .card.tool .toolhead { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.summary .card.toolresult details { display: none; }
+"""
+
+
+def esc(s):
+    return html.escape("" if s is None else str(s), quote=True)
+
+
+def short(s, n=120):
+    s = (s or "").replace("\n", " ").strip()
+    return s if len(s) <= n else s[:n] + "…"
+
+
+def md_inline(text):
+    parts = re.split(r"(`[^`\n]+`)", text)
+    out = []
+    for j, part in enumerate(parts):
+        if j % 2 == 1:
+            out.append(f"<code>{esc(part[1:-1])}</code>")
+        else:
+            t = esc(part)
+            t = re.sub(r"\*\*([^*\n]+)\*\*", r"<strong>\1</strong>", t)
+            t = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", t)
+            t = re.sub(r"\[([^\]\n]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', t)
+            out.append(t)
+    return "".join(out)
+
+
+def render_markdown(text):
+    """Minimal markdown -> HTML. Handles fences, headers, lists, paragraphs, inline code/bold/italic/links."""
+    if not text:
+        return ""
+    lines = text.split("\n")
+    out = []
+    in_list = None
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            out.append(f"</{in_list}>")
+            in_list = None
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r"^```(\w*)\s*$", line)
+        if m:
+            close_list()
+            i += 1
+            buf = []
+            while i < len(lines) and not re.match(r"^```\s*$", lines[i]):
+                buf.append(lines[i])
+                i += 1
+            i += 1
+            out.append(f"<pre><code>{esc(chr(10).join(buf))}</code></pre>")
+            continue
+        m = re.match(r"^(#{1,4})\s+(.*)$", line)
+        if m:
+            close_list()
+            level = len(m.group(1))
+            out.append(f"<h{level}>{md_inline(m.group(2))}</h{level}>")
+            i += 1
+            continue
+        m = re.match(r"^\s*[-*]\s+(.*)$", line)
+        if m:
+            if in_list != "ul":
+                close_list()
+                out.append("<ul>")
+                in_list = "ul"
+            out.append(f"<li>{md_inline(m.group(1))}</li>")
+            i += 1
+            continue
+        m = re.match(r"^\s*\d+\.\s+(.*)$", line)
+        if m:
+            if in_list != "ol":
+                close_list()
+                out.append("<ol>")
+                in_list = "ol"
+            out.append(f"<li>{md_inline(m.group(1))}</li>")
+            i += 1
+            continue
+        if not line.strip():
+            close_list()
+            i += 1
+            continue
+        close_list()
+        para = [line]
+        i += 1
+        while i < len(lines) and lines[i].strip() and not re.match(r"^(```|#{1,4}\s|\s*[-*]\s|\s*\d+\.\s)", lines[i]):
+            para.append(lines[i])
+            i += 1
+        joined = "\n".join(para)
+        out.append("<p>" + md_inline(joined).replace("\n", "<br>") + "</p>")
+
+    close_list()
+    return "\n".join(out)
+
+
+def card(role, ts, body_html, extra_class=""):
+    cls = f"card {role}"
+    if extra_class:
+        cls += " " + extra_class
+    return (
+        f'<section class="{cls}">'
+        f'<div class="card-header"><span class="role">{role}</span><span class="ts">{esc(ts)}</span></div>'
+        f"{body_html}</section>"
+    )
+
+
+def render_thinking(block):
+    text = (block.get("thinking") or "").strip()
+    if not text:
+        return ""
+    return (
+        f'<details class="thinking">'
+        f"<summary>thinking — {esc(short(text, 140))}</summary>"
+        f'<div class="body">{esc(text)}</div>'
+        f"</details>"
+    )
+
+
+def tool_use_summary_html(block):
+    """Return HTML-safe summary (already escaped/marked-up)."""
+    name = block.get("name", "?")
+    inp = block.get("input", {}) or {}
+    if name in ("Write", "Edit", "NotebookEdit", "Read"):
+        fp = inp.get("file_path", "") or ""
+        if "/" in fp:
+            head, _, tail = fp.rpartition("/")
+            return f"{esc(head)}/<strong>{esc(tail)}</strong>"
+        return f"<strong>{esc(fp)}</strong>"
+    if name == "Bash":
+        return esc(short(inp.get("description") or inp.get("command", ""), 100))
+    first_key = next(iter(inp), None)
+    if first_key:
+        return esc(f"{first_key}={short(str(inp[first_key]), 80)}")
+    return ""
+
+
+def tool_use_body(block):
+    name = block.get("name", "?")
+    inp = block.get("input", {}) or {}
+    if name in ("Write", "Edit", "NotebookEdit"):
+        fp = inp.get("file_path", "")
+        rows = [f'<div class="kv"><b>file:</b> {esc(fp)}</div>']
+        if "old_string" in inp:
+            rows.append('<div class="kv"><b>old:</b></div>')
+            rows.append(f'<pre class="raw">{esc(inp.get("old_string", ""))}</pre>')
+            rows.append('<div class="kv"><b>new:</b></div>')
+            rows.append(f'<pre class="raw">{esc(inp.get("new_string", ""))}</pre>')
+        elif "content" in inp:
+            rows.append('<div class="kv"><b>content:</b></div>')
+            rows.append(f'<pre class="raw">{esc(inp.get("content", ""))}</pre>')
+        return "\n".join(rows)
+    if name == "Bash":
+        cmd = inp.get("command", "")
+        desc = inp.get("description", "")
+        out = ""
+        if desc:
+            out += f'<div class="kv"><b>desc:</b> {esc(desc)}</div>'
+        out += f'<pre class="raw">{esc(cmd)}</pre>'
+        return out
+    if name == "Read":
+        fp = inp.get("file_path", "")
+        out = f'<div class="kv"><b>file:</b> {esc(fp)}</div>'
+        for k in ("offset", "limit", "pages"):
+            if k in inp:
+                out += f'<div class="kv"><b>{k}:</b> {esc(inp[k])}</div>'
+        return out
+    return f'<pre class="raw">{esc(json.dumps(inp, indent=2))}</pre>'
+
+
+def tool_result_text(block):
+    content = block.get("content", "")
+    if isinstance(content, list):
+        parts = []
+        for c in content:
+            if isinstance(c, dict):
+                parts.append(c.get("text", json.dumps(c)))
+            else:
+                parts.append(str(c))
+        content = "\n".join(parts)
+    return content
+
+
+def render_tool_pair(use_block, result_block, ts):
+    name = use_block.get("name", "?")
+    summary = tool_use_summary_html(use_block)
+    body = (
+        '<details open><summary class="callsum"><b>call</b></summary>'
+        f'<div class="body">{tool_use_body(use_block)}</div></details>'
+    )
+    if result_block is not None:
+        content = tool_result_text(result_block)
+        is_err = bool(result_block.get("is_error"))
+        label = "result (error)" if is_err else "result"
+        first_line = short(content or "", 160) or "(empty)"
+        cls = "result error" if is_err else "result"
+        body += (
+            f'<details class="{cls}"><summary>{label} — {esc(first_line)}</summary>'
+            f'<pre class="raw">{esc(content)}</pre></details>'
+        )
+    else:
+        body += '<div class="kv pending">(no result)</div>'
+
+    name_cls = "tool-" + re.sub(r"[^a-z0-9]", "", name.lower())
+    inner = (
+        f'<div class="toolhead"><span class="name {name_cls}">{esc(name)}</span>'
+        f'<span class="toolsummary">{summary}</span></div>'
+        f"{body}"
+    )
+    return card("tool", ts, inner)
+
+
+def render_orphan_result(block, ts):
+    content = tool_result_text(block)
+    is_err = bool(block.get("is_error"))
+    extra = "error" if is_err else ""
+    label = "result (error, orphan)" if is_err else "result (orphan)"
+    first_line = short(content or "", 160) or "(empty)"
+    inner = (
+        f"<details><summary>{label} — {esc(first_line)}</summary>"
+        f'<pre class="raw">{esc(content)}</pre></details>'
+    )
+    return card("toolresult", ts, inner, extra)
+
+
+def render_entries(entries):
+    # First pass: collect tool_results by tool_use_id.
+    results_by_id = {}
+    for entry in entries:
+        t = entry.get("type")
+        if t not in ("user", "assistant", "system"):
+            continue
+        msg = entry.get("message", {}) or {}
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                tid = block.get("tool_use_id")
+                if tid:
+                    results_by_id[tid] = (block, entry.get("timestamp", ""))
+
+    seen_use_ids = set()
+    out = []
+    turn_count = 0
+    tool_count = 0
+
+    for entry in entries:
+        t = entry.get("type")
+        if t in SKIP_TYPES or t not in ("user", "assistant", "system"):
+            continue
+        msg = entry.get("message", {}) or {}
+        content = msg.get("content")
+        ts = entry.get("timestamp", "")
+
+        if isinstance(content, str):
+            body = f'<div class="md">{render_markdown(content)}</div>'
+            out.append(card(t, ts, body))
+            turn_count += 1
+            continue
+
+        if not isinstance(content, list):
+            continue
+
+        role_buffer = []
+
+        def flush_role():
+            nonlocal turn_count
+            joined = "\n".join(s for s in role_buffer if s.strip())
+            if joined.strip():
+                out.append(card(t, ts, joined))
+                turn_count += 1
+            role_buffer.clear()
+
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "thinking":
+                rendered = render_thinking(block)
+                if rendered:
+                    role_buffer.append(rendered)
+            elif btype == "text":
+                text = (block.get("text") or "").strip()
+                if text:
+                    role_buffer.append(f'<div class="md">{render_markdown(text)}</div>')
+            elif btype == "tool_use":
+                flush_role()
+                tid = block.get("id")
+                seen_use_ids.add(tid)
+                result_pair = results_by_id.get(tid)
+                result_block = result_pair[0] if result_pair else None
+                out.append(render_tool_pair(block, result_block, ts))
+                tool_count += 1
+            elif btype == "tool_result":
+                tid = block.get("tool_use_id")
+                if tid in seen_use_ids:
+                    continue  # already rendered alongside its tool_use
+                flush_role()
+                out.append(render_orphan_result(block, ts))
+        flush_role()
+
+    return out, turn_count, tool_count
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("jsonl", type=Path)
+    ap.add_argument("-o", "--output", type=Path)
+    ap.add_argument("--no-open", action="store_true", help="don't open the result in a browser")
+    args = ap.parse_args()
+
+    entries = []
+    with args.jsonl.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    rendered, turn_count, tool_count = render_entries(entries)
+    title = args.jsonl.name
+
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{esc(title)}</title>
+<style>{CSS}</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="name">{esc(title)}</span>
+  <span class="stats">{turn_count} role turns • {tool_count} tool calls</span>
+  <span class="spacer"></span>
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">expand all</button>
+  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">collapse all</button>
+  <button onclick="document.body.classList.toggle('summary')">summary</button>
+</header>
+<main>
+{chr(10).join(rendered)}
+</main>
+</body>
+</html>
+"""
+
+    out = args.output or args.jsonl.with_suffix(".html")
+    out.write_text(page)
+    print(f"wrote {out}", file=sys.stderr)
+    if not args.no_open:
+        webbrowser.open(out.resolve().as_uri())
+
+
+if __name__ == "__main__":
+    main()
