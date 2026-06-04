@@ -132,7 +132,7 @@ def scan_session(path):
     children = {}
     last_iso = None
     try:
-        with path.open() as f:
+        with path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -296,7 +296,7 @@ def render_session(path):
     if not p.is_file() or p.suffix != ".jsonl" or PROJECTS not in p.resolve().parents:
         return None
     entries = []
-    with p.open() as f:
+    with p.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:

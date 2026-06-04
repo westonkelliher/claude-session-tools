@@ -495,7 +495,7 @@ def main():
     args = ap.parse_args()
 
     entries = []
-    with args.jsonl.open() as f:
+    with args.jsonl.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -532,7 +532,7 @@ def main():
 """
 
     out = args.output or args.jsonl.with_suffix(".html")
-    out.write_text(page)
+    out.write_text(page, encoding="utf-8")
     print(f"wrote {out}", file=sys.stderr)
     if not args.no_open:
         webbrowser.open(out.resolve().as_uri())
