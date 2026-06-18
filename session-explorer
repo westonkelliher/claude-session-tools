@@ -368,16 +368,13 @@ def render_session(path):
         f'<span class="name">{esc(title)}</span>'
         f'<span class="stats">{turns} turns • {tools} tools • {esc(meta.get("cwd") or "")}</span>'
         '<span class="spacer"></span>'
-        "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=true)\">expand all</button>"
-        "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=false)\">collapse all</button>"
-        "<button onclick=\"document.body.classList.toggle('summary')\">summary</button>"
         f"{sv.THEME_BUTTON}"
         "</header>"
     )
     return (
         f'<!doctype html><html><head><meta charset="utf-8"><title>{esc(title)}</title>'
-        f"{sv.THEME_HEAD_JS}<style>{sv.CSS}</style></head><body>{backbar}"
-        f'<main>{chr(10).join(rendered)}</main></body></html>'
+        f"{sv.THEME_HEAD_JS}<style>{sv.CSS}</style></head><body class=\"summary\">{backbar}"
+        f'<main>{chr(10).join(rendered)}</main>{sv.EXPAND_SCRIPT}</body></html>'
     )
 
 

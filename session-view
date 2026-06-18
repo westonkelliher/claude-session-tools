@@ -133,6 +133,16 @@ THEME_BUTTON = (
     "try{localStorage.setItem('cs-theme',d.classList.contains('light')?'light':'dark');}catch(e){}})()\""
     ">◐ theme</button>"
 )
+# Click any compact row to expand it in place (used by both the standalone
+# viewer and session-explorer's per-session page).
+EXPAND_SCRIPT = """<script>
+document.querySelector('main').addEventListener('click', function(e){
+  if (e.target.closest('a, summary, button')) return;
+  if (window.getSelection().toString()) return;
+  var card = e.target.closest('.card');
+  if (card) card.classList.toggle('expanded');
+});
+</script>"""
 
 CSS = THEME_VARS + """
 * { box-sizing: border-box; }
@@ -648,14 +658,7 @@ def main():
 <main>
 {chr(10).join(rendered)}
 </main>
-<script>
-document.querySelector('main').addEventListener('click', function(e){{
-  if (e.target.closest('a, summary, button')) return;
-  if (window.getSelection().toString()) return;
-  var card = e.target.closest('.card');
-  if (card) card.classList.toggle('expanded');
-}});
-</script>
+{EXPAND_SCRIPT}
 </body>
 </html>
 """
