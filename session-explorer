@@ -11,6 +11,7 @@ import argparse
 import html
 import json
 import os
+import math
 import re
 import sys
 import time
@@ -68,7 +69,17 @@ text-decoration:none;color:inherit}
 .row .title .sub{color:var(--muted);font-size:12px}
 .row .badge{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
 .row .branch{color:#9b6cff}
-.row .age{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none;width:48px;text-align:right}
+.row .age{font-family:var(--mono);font-size:11px;font-weight:600;flex:none;min-width:46px;text-align:center;
+padding:1px 8px;border-radius:999px;border:1px solid transparent;letter-spacing:.02em}
+/* newness: continuous teal (fresh) -> lime-green (stale), set inline per row */
+:root.light .row .age{color:#147d6a!important}
+.msgpair{display:inline-flex;flex:none}
+.row .msgs,.row .umsgs{font-family:var(--mono);font-size:11px;font-weight:600;flex:none;text-align:center;
+padding:1px 8px;border:1px solid transparent}
+.row .msgs{border-radius:999px 0 0 999px}
+.row .umsgs{border-radius:0 999px 999px 0;border-left:0}
+:root.light .row .msgs{color:#5a1fc0!important}
+:root.light .row .umsgs{color:#1f55c0!important}
 .more{display:block;width:100%;text-align:left;padding:4px 14px;border:0;border-top:1px solid var(--border);
 background:var(--proj-head);color:var(--link);font:inherit;font-size:12px;cursor:pointer}
 .more:hover{background:var(--row-hover)}
@@ -94,11 +105,43 @@ def rel_age(ts):
     return "now"
 
 
-def fsize(n):
-    for unit in ("B", "K", "M"):
-        if n < 1024 or unit == "M":
-            return f"{n:.0f}{unit}" if unit == "B" else f"{n / 1024:.0f}{unit}"
-        n /= 1024
+def chip_style(n, dim, bright, cap):
+    """Muted-gray-tinted (low) -> vivid (high) ramp; max reached at `cap`."""
+    t = min(1.0, math.sqrt(max(n, 0)) / math.sqrt(cap))
+    L = lambda i: dim[i] + (bright[i] - dim[i]) * t
+    r, g, b = L(0), L(1), L(2)
+    return (f"background:rgba({r:.0f},{g:.0f},{b:.0f},{0.06 + 0.20 * t:.3f});"
+            f"border-color:rgba({r:.0f},{g:.0f},{b:.0f},{0.50 * t:.3f});"
+            f"color:rgb({r:.0f},{g:.0f},{b:.0f})")
+
+
+# Anchors mapped to evenly spaced positions so these ages are equally
+# distinguishable; t is piecewise-linear in log(seconds) between them.
+_AGE_ANCHORS = [(120, 0.0), (1200, 0.2), (28800, 0.4),
+                (86400, 0.6), (259200, 0.8), (691200, 1.0)]
+
+
+def age_style(ts):
+    """Continuous lime-green (fresh) -> teal (stale) ramp."""
+    if not ts:
+        return ""
+    d = max(time.time() - ts, 1)
+    ld = math.log(d)
+    t = _AGE_ANCHORS[-1][1]
+    if ld <= math.log(_AGE_ANCHORS[0][0]):
+        t = 0.0
+    else:
+        for (s0, t0), (s1, t1) in zip(_AGE_ANCHORS, _AGE_ANCHORS[1:]):
+            if ld <= math.log(s1):
+                l0, l1 = math.log(s0), math.log(s1)
+                t = t0 + (t1 - t0) * (ld - l0) / (l1 - l0)
+                break
+    lerp = lambda a, b: a + (b - a) * t
+    r, g, b = lerp(190, 88), lerp(240, 176), lerp(60, 170)
+    tr, tg, tb = lerp(205, 96), lerp(250, 180), lerp(70, 176)
+    return (f"background:rgba({r:.0f},{g:.0f},{b:.0f},{lerp(0.26, 0.07):.3f});"
+            f"border-color:rgba({r:.0f},{g:.0f},{b:.0f},{lerp(0.50, 0.0):.3f});"
+            f"color:rgb({tr:.0f},{tg:.0f},{tb:.0f})")
 
 
 def first_human_prompt(text):
@@ -129,7 +172,7 @@ def scan_session(path):
         "file": str(path), "name": path.stem, "size": st.st_size,
         "cwd": None, "branch": None, "color": None, "version": None,
         "custom_title": None, "ai_title": None, "last_prompt": None,
-        "first_prompt": "", "msgs": 0, "last_ts": st.st_mtime, "branched": False,
+        "first_prompt": "", "msgs": 0, "user_msgs": 0, "last_ts": st.st_mtime, "branched": False,
     }
     children = {}
     last_iso = None
@@ -161,12 +204,16 @@ def scan_session(path):
                     p = d.get("parentUuid")
                     if p:
                         children[p] = children.get(p, 0) + 1
-                    if t == "user" and not meta["first_prompt"]:
+                    if t == "user":
                         c = d.get("message", {}).get("content")
                         if isinstance(c, list):
                             c = " ".join(b.get("text", "") for b in c
                                          if isinstance(b, dict) and b.get("type") == "text")
-                        meta["first_prompt"] = first_human_prompt(c)
+                        # count genuine human turns (skip tool-result-only messages)
+                        if isinstance(c, str) and c.strip():
+                            meta["user_msgs"] += 1
+                        if not meta["first_prompt"]:
+                            meta["first_prompt"] = first_human_prompt(c)
                     if d.get("timestamp"):
                         last_iso = d["timestamp"]
     except OSError:
@@ -233,9 +280,14 @@ def render_index():
                 + (f' <span class="sub">— {esc(sub[:80])}</span>' if sub else "")
                 + "</span>"
                 f'{branch}{gbadge}'
-                f'<span class="badge">{m["msgs"]} msg</span>'
-                f'<span class="badge">{esc(fsize(m["size"]))}</span>'
-                f'<span class="age">{esc(rel_age(m["last_ts"]))}</span>'
+                f'<span class="msgpair">'
+                f'<span class="msgs" style="{chip_style(m["msgs"], (150,140,170), (190,150,255), 300)}" '
+                f'title="total messages">{m["msgs"]} msg</span>'
+                f'<span class="umsgs" style="{chip_style(m["user_msgs"], (140,150,175), (120,175,255), 30)}" '
+                f'title="user messages">{m["user_msgs"]} usr</span>'
+                f'</span>'
+                f'<span class="age" style="{age_style(m["last_ts"])}">'
+                f'{esc(rel_age(m["last_ts"]))}</span>'
                 "</a>"
             )
         open_attr = " open" if pi == 0 else ""
