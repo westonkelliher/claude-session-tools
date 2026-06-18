@@ -54,19 +54,22 @@ THEME_VARS = """
   --topbar-bg: #1b1e23;
   --btn-bg: #23272e;
   --btn-hover: #2d323a;
-  --user-bg: #1a2740;
+  /* Cards share neutral surfaces raised above --bg; identity = left edge + role
+     color. Surfaces are graded by importance (human/assistant brightest, tools
+     dimmer, thinking dimmest). Only user (cool) and error (warm) carry a tint. */
+  --user-bg: #1c2130;
   --user-edge: #5f97ff;
-  --asst-bg: #172a1f;
-  --asst-edge: #46cf78;
-  --thinking-bg: #191b20;
-  --thinking-fg: #9aa0aa;
-  --tooluse-bg: #1f2023;
-  --tooluse-edge: #e3a23c;
-  --toolresult-bg: #1d2128;
-  --toolresult-edge: #8b9cb8;
-  --error-bg: #3a1d19;
+  --asst-bg: #1d2026;
+  --asst-edge: #4fc97a;
+  --thinking-bg: #17191d;
+  --thinking-fg: #888e98;
+  --tooluse-bg: #1a1d22;
+  --tooluse-edge: #e0a23c;
+  --toolresult-bg: #191c21;
+  --toolresult-edge: #7e93b4;
+  --error-bg: #2c1b18;
   --error-edge: #f2705f;
-  --code-bg: #0d0e10;
+  --code-bg: #0b0c0e;
   --code-fg: #e6e6e6;
   --link: #5fa0ff;
   --inline-code-bg: rgba(255,255,255,0.09);
@@ -79,8 +82,25 @@ THEME_VARS = """
   --card: #1b1e23;
   --proj-head: #1f242b;
   --row-hover: #1d2738;
-  --hairline: rgba(255,255,255,0.05);
-  --detail-summary: #9aa0aa;
+  --hairline: rgba(255,255,255,0.07);
+  --detail-summary: #888e98;
+  /* Tool-name chips. Dark = muted solid fills + white ink (no neon glow).
+     Same hue per tool across themes; prominence comes from chroma (colorful
+     vs gray), not loudness. Recede tools stay gray; bash/task carry hue. */
+  --chip-ink: rgba(255,255,255,0.95);
+  --chip-bash: #34948c;      /* teal   — execute  (prominent) */
+  --chip-task: #bd6088;      /* rose   — agents   (prominent) */
+  --chip-taskupdate: #bd6088;
+  --chip-write: #3f8f63;     /* green  — create */
+  --chip-edit: #a9803f;      /* amber  — modify */
+  --chip-notebook: #7d6bbf;  /* purple — modify */
+  --chip-read: #475463;      /* slate  — read   (recede) */
+  --chip-glob: #4a5775;      /* indigo — search (recede) */
+  --chip-grep: #4a5775;
+  --chip-webfetch: #44607a;  /* steel  — fetch  (recede) */
+  --chip-websearch: #44607a;
+  --chip-todo: #4d586a;      /* gray */
+  --chip-default: #8f7440;   /* amber — unlisted */
   --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -92,17 +112,21 @@ THEME_VARS = """
   --topbar-bg: #fff;
   --btn-bg: #fff;
   --btn-hover: #f0f0eb;
-  --user-bg: #dbe8ff;
+  /* Mirror the dark structure: neutral ranked surfaces, identity via the left
+     edge; only user (cool) and error (warm) carry a tint. Assistant content
+     rises to white; tool noise sinks slightly below the paper bg. This also
+     stops cool tool chips from clashing with a warm card. */
+  --user-bg: #eaf1fd;
   --user-edge: #2f6feb;
-  --asst-bg: #d8efdf;
+  --asst-bg: #ffffff;
   --asst-edge: #1f8a4c;
-  --thinking-bg: #ebebe8;
+  --thinking-bg: #e9e8e3;
   --thinking-fg: #444;
-  --tooluse-bg: #fbe8c8;
+  --tooluse-bg: #f0f0eb;
   --tooluse-edge: #c97a17;
-  --toolresult-bg: #e6e9ef;
+  --toolresult-bg: #ebebe6;
   --toolresult-edge: #5c6b85;
-  --error-bg: #fcdcd6;
+  --error-bg: #fce9e4;
   --error-edge: #c0392b;
   --code-bg: #2b2b2b;
   --code-fg: #f1f1f1;
@@ -119,6 +143,21 @@ THEME_VARS = """
   --row-hover: #eef3ff;
   --hairline: rgba(0,0,0,0.04);
   --detail-summary: #444;
+  /* Light keeps the ORIGINAL (pre-dark-theme) chip palette: solid fills + white ink. */
+  --chip-ink: #fff;
+  --chip-bash: #485e6c;
+  --chip-task: #db2777;
+  --chip-taskupdate: #be185d;
+  --chip-write: #1f8a4c;
+  --chip-edit: #cf8a33;
+  --chip-notebook: #8b5cf6;
+  --chip-read: #608db2;
+  --chip-glob: #7c3aed;
+  --chip-grep: #6d28d9;
+  --chip-webfetch: #0ea5e9;
+  --chip-websearch: #0284c7;
+  --chip-todo: #475569;
+  --chip-default: #c97a17;
 }
 """
 
@@ -168,7 +207,7 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
   margin: 10px 0;
   padding: 10px 14px;
   border: 1px solid transparent;
-  border-left-width: 5px;
+  border-left-width: 10px;
 }
 .card-header {
   display: flex; justify-content: space-between; align-items: baseline;
@@ -192,34 +231,34 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
 .card.tool .role { color: var(--tooluse-edge); }
 .card.tool .toolhead { font-family: var(--mono); font-size: 13px; margin-bottom: 6px; word-break: break-all; }
 .card.tool .toolhead .name {
-  display: inline-block; background: #a8761f; color: #fff;
+  display: inline-block; background: var(--chip-default); color: var(--chip-ink);
   font-size: 12px; padding: 1px 7px; border-radius: 3px; margin-right: 8px;
   font-weight: 600;
 }
-.card.tool .toolhead .name.tool-bash         { background: #2f4858; }
-.card.tool .toolhead .name.tool-write        { background: #1f8a4c; }
-.card.tool .toolhead .name.tool-edit         { background: #c97a17; }
-.card.tool .toolhead .name.tool-read         { background: #4a7da8; }
-.card.tool .toolhead .name.tool-notebookedit { background: #8b5cf6; }
-.card.tool .toolhead .name.tool-glob         { background: #5b6ad6; }
-.card.tool .toolhead .name.tool-grep         { background: #5b6ad6; }
-.card.tool .toolhead .name.tool-webfetch     { background: #0e8fcf; }
-.card.tool .toolhead .name.tool-websearch    { background: #0e8fcf; }
-.card.tool .toolhead .name.tool-task         { background: #db2777; }
-.card.tool .toolhead .name.tool-todowrite    { background: #475569; }
-.card.tool .toolhead .name.tool-taskcreate   { background: #db2777; }
-.card.tool .toolhead .name.tool-taskupdate   { background: #db2777; }
+.card.tool .toolhead .name.tool-bash         { background: var(--chip-bash); }
+.card.tool .toolhead .name.tool-write        { background: var(--chip-write); }
+.card.tool .toolhead .name.tool-edit         { background: var(--chip-edit); }
+.card.tool .toolhead .name.tool-read         { background: var(--chip-read); }
+.card.tool .toolhead .name.tool-notebookedit { background: var(--chip-notebook); }
+.card.tool .toolhead .name.tool-glob         { background: var(--chip-glob); }
+.card.tool .toolhead .name.tool-grep         { background: var(--chip-grep); }
+.card.tool .toolhead .name.tool-webfetch     { background: var(--chip-webfetch); }
+.card.tool .toolhead .name.tool-websearch    { background: var(--chip-websearch); }
+.card.tool .toolhead .name.tool-task         { background: var(--chip-task); }
+.card.tool .toolhead .name.tool-todowrite    { background: var(--chip-todo); }
+.card.tool .toolhead .name.tool-taskcreate   { background: var(--chip-task); }
+.card.tool .toolhead .name.tool-taskupdate   { background: var(--chip-taskupdate); }
 .card.tool .toolhead .toolsummary { color: var(--toolsummary); }
 .card.tool .toolhead .toolsummary strong {
-  background: #a8761f;
-  color: #fff;
+  background: var(--chip-default);
+  color: var(--chip-ink);
   padding: 0 5px;
   border-radius: 3px;
 }
-.card.tool .toolhead .name.tool-write + .toolsummary strong        { background: #1f8a4c; }
-.card.tool .toolhead .name.tool-edit + .toolsummary strong         { background: #c97a17; }
-.card.tool .toolhead .name.tool-read + .toolsummary strong         { background: #4a7da8; }
-.card.tool .toolhead .name.tool-notebookedit + .toolsummary strong { background: #8b5cf6; }
+.card.tool .toolhead .name.tool-write + .toolsummary strong        { background: var(--chip-write); }
+.card.tool .toolhead .name.tool-edit + .toolsummary strong         { background: var(--chip-edit); }
+.card.tool .toolhead .name.tool-read + .toolsummary strong         { background: var(--chip-read); }
+.card.tool .toolhead .name.tool-notebookedit + .toolsummary strong { background: var(--chip-notebook); }
 .card.tool .toolhead .name.tool-bash + .toolsummary { color: var(--toolsummary-strong); font-weight: 600; }
 .card.tool details { background: var(--details-bg); border-radius: 4px; padding: 4px 8px; margin: 4px 0; }
 .card.tool details > summary { cursor: pointer; font-family: var(--mono); font-size: 12px; color: var(--detail-summary); }
@@ -281,7 +320,7 @@ details > summary { user-select: none; }
 
 /* Summary (compact) mode */
 body.summary main { padding-top: 12px; }
-body.summary .card { margin: 0; padding: 2px 8px; border-radius: 0; border-top-width: 0; border-bottom-width: 0; border-left-width: 4px; }
+body.summary .card { margin: 0; padding: 2px 8px; border-radius: 0; border-top-width: 0; border-bottom-width: 0; border-left-width: 8px; }
 body.summary .card + .card { border-top: 1px solid var(--hairline); }
 body.summary .card.user { margin-top: 22px; }
 body.summary .card.user:first-child { margin-top: 0; }
@@ -298,7 +337,7 @@ body.summary .card:hover { filter: brightness(1.18); }
 body.summary .card.expanded {
   cursor: default; filter: none;
   margin: 10px 0; padding: 10px 14px; border-radius: 6px;
-  border-top-width: 0; border-bottom-width: 0; border-left-width: 5px;
+  border-top-width: 0; border-bottom-width: 0; border-left-width: 10px;
 }
 body.summary .card.expanded + .card { border-top: 0; }
 body.summary .card.expanded .card-header { display: flex; }
@@ -306,6 +345,10 @@ body.summary .card.tool.expanded details,
 body.summary .card.toolresult.expanded details { display: block; }
 body.summary .card.tool.expanded .toolhead { white-space: normal; overflow: visible; }
 
+.topbar .back {
+  color: var(--link); text-decoration: none; font-size: 13px;
+}
+.topbar .back:hover { text-decoration: underline; }
 .topbar .model {
   font-family: var(--mono); font-size: 11px; color: var(--asst-edge);
   border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px;

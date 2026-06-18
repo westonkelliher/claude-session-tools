@@ -364,7 +364,7 @@ def render_session(path):
     title = title_for(meta)
     backbar = (
         '<header class="topbar">'
-        '<a href="/" style="text-decoration:none;font-size:13px">&larr; all sessions</a>'
+        '<a href="/" class="back">&larr; all sessions</a>'
         f'<span class="name">{esc(title)}</span>'
         f'<span class="stats">{turns} turns • {tools} tools • {esc(meta.get("cwd") or "")}</span>'
         '<span class="spacer"></span>'
