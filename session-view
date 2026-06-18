@@ -11,10 +11,34 @@ import json
 import re
 import sys
 import webbrowser
+from collections import Counter
 from pathlib import Path
 
 
 SKIP_TYPES = {"queue-operation", "ai-title", "last-prompt", "attachment", "summary"}
+
+
+def pretty_model(mid):
+    """Turn a raw model id (claude-opus-4-8) into a label (Opus 4.8)."""
+    if not mid or mid.startswith("<"):
+        return None
+    fam = next((f for f in ("opus", "sonnet", "haiku", "fable") if f in mid.lower()), None)
+    m = re.search(r"(?<![0-9])([0-9])-([0-9])(?![0-9])", mid)
+    ver = ".".join(m.groups()) if m else None
+    if fam and ver:
+        return f"{fam.capitalize()} {ver}"
+    return fam.capitalize() if fam else mid
+
+
+def detect_model(entries):
+    """The model that produced most assistant turns in the session."""
+    c = Counter()
+    for e in entries:
+        msg = e.get("message") or {}
+        mid = msg.get("model") if isinstance(msg, dict) else None
+        if mid and not mid.startswith("<"):
+            c[mid] += 1
+    return c.most_common(1)[0][0] if c else None
 
 # Shared theme tokens. Dark is the default (:root); .light on <html> opts into light.
 # Colors are graded so attention tracks importance: human/assistant content sits on
@@ -257,6 +281,25 @@ body.summary .thinking { padding: 2px 8px; margin: 2px 0; }
 body.summary .card.tool details { display: none; }
 body.summary .card.tool .toolhead { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.summary .card.toolresult details { display: none; }
+
+/* Click any compact row to expand it back to full detail */
+body.summary .card { cursor: pointer; }
+body.summary .card:hover { filter: brightness(1.18); }
+body.summary .card.expanded {
+  cursor: default; filter: none;
+  margin: 10px 0; padding: 10px 14px; border-radius: 6px;
+  border-top-width: 0; border-bottom-width: 0; border-left-width: 5px;
+}
+body.summary .card.expanded + .card { border-top: 0; }
+body.summary .card.expanded .card-header { display: flex; }
+body.summary .card.tool.expanded details,
+body.summary .card.toolresult.expanded details { display: block; }
+body.summary .card.tool.expanded .toolhead { white-space: normal; overflow: visible; }
+
+.topbar .model {
+  font-family: var(--mono); font-size: 11px; color: var(--asst-edge);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px;
+}
 """
 
 
@@ -583,6 +626,8 @@ def main():
 
     rendered, turn_count, tool_count = render_entries(entries)
     title = args.jsonl.name
+    model = pretty_model(detect_model(entries))
+    model_chip = f'<span class="model">{esc(model)}</span>' if model else ""
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -596,14 +641,21 @@ def main():
 <header class="topbar">
   <span class="name">{esc(title)}</span>
   <span class="stats">{turn_count} role turns • {tool_count} tool calls</span>
+  {model_chip}
   <span class="spacer"></span>
-  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">expand all</button>
-  <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">collapse all</button>
   {THEME_BUTTON}
 </header>
 <main>
 {chr(10).join(rendered)}
 </main>
+<script>
+document.querySelector('main').addEventListener('click', function(e){{
+  if (e.target.closest('a, summary, button')) return;
+  if (window.getSelection().toString()) return;
+  var card = e.target.closest('.card');
+  if (card) card.classList.toggle('expanded');
+}});
+</script>
 </body>
 </html>
 """
