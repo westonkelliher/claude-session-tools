@@ -38,38 +38,40 @@ COLOR = {
     "gray": "#6a6a6a", "grey": "#6a6a6a",
 }
 
-INDEX_CSS = """
-:root{--bg:#f6f6f2;--text:#1c1c1c;--muted:#6a6a6a;--border:#e3e3df;--card:#fff;
---font:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
---mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+INDEX_CSS = sv.THEME_VARS + """
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font)}
-header.topbar{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--border);
+header.topbar{position:sticky;top:0;z-index:10;background:var(--topbar-bg);border-bottom:1px solid var(--border);
 padding:10px 20px;display:flex;gap:14px;align-items:baseline}
 header .name{font-weight:600}
 header .stats{color:var(--muted);font-size:13px}
 header .spacer{flex:1}
-header input{font:inherit;padding:5px 10px;border:1px solid var(--border);border-radius:5px;width:300px}
-header select{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:5px}
+header input{font:inherit;padding:5px 10px;border:1px solid var(--border);border-radius:5px;width:300px;
+background:var(--btn-bg);color:var(--text)}
+header select{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:5px;
+background:var(--btn-bg);color:var(--text)}
+header button{font:inherit;font-size:12px;background:var(--btn-bg);border:1px solid var(--border);
+border-radius:4px;padding:4px 10px;cursor:pointer;color:var(--text)}
+header button:hover{background:var(--btn-hover)}
 main{max-width:1100px;margin:0 auto;padding:10px 20px 60px}
 .proj{margin:7px 0;border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden}
-.proj>summary{cursor:pointer;padding:6px 14px;font-weight:600;background:#fbfbf8;
+.proj>summary{cursor:pointer;padding:6px 14px;font-weight:600;background:var(--proj-head);
 display:flex;align-items:baseline;gap:10px;list-style:none}
 .proj>summary::-webkit-details-marker{display:none}
 .proj>summary .path{font-family:var(--mono);font-size:13px}
 .proj>summary .count{color:var(--muted);font-size:12px;font-weight:400}
 .row{display:flex;align-items:center;gap:12px;padding:4px 14px;border-top:1px solid var(--border);
 text-decoration:none;color:inherit}
-.row:hover{background:#eef3ff}
+.row:hover{background:var(--row-hover)}
 .dot{width:9px;height:9px;border-radius:50%;flex:none;background:#bbb}
 .row .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .title .sub{color:var(--muted);font-size:12px}
 .row .badge{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
-.row .branch{color:#7c3aed}
+.row .branch{color:#9b6cff}
 .row .age{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none;width:48px;text-align:right}
 .more{display:block;width:100%;text-align:left;padding:4px 14px;border:0;border-top:1px solid var(--border);
-background:#fbfbf8;color:#2f6feb;font:inherit;font-size:12px;cursor:pointer}
-.more:hover{background:#eef3ff}
+background:var(--proj-head);color:var(--link);font:inherit;font-size:12px;cursor:pointer}
+.more:hover{background:var(--row-hover)}
 .proj:not(.show-all) .row.over{display:none}
 .hidden{display:none!important}
 .empty{color:var(--muted);padding:40px;text-align:center}
@@ -248,7 +250,7 @@ def render_index():
         )
     body = "\n".join(rows_html) or '<div class="empty">No sessions found.</div>'
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>session explorer</title><style>{INDEX_CSS}</style></head><body>
+<title>session explorer</title>{sv.THEME_HEAD_JS}<style>{INDEX_CSS}</style></head><body>
 <header class="topbar">
   <span class="name">session explorer</span>
   <span class="stats">{len(projects)} projects • {nsess} sessions</span>
@@ -256,6 +258,7 @@ def render_index():
   <input id="q" placeholder="filter sessions…" autofocus>
   <button onclick="document.querySelectorAll('.proj').forEach(d=>d.open=true)">expand</button>
   <button onclick="document.querySelectorAll('.proj').forEach(d=>d.open=false)">collapse</button>
+  {sv.THEME_BUTTON}
 </header>
 <main>{body}</main>
 <script>
@@ -316,11 +319,12 @@ def render_session(path):
         "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=true)\">expand all</button>"
         "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=false)\">collapse all</button>"
         "<button onclick=\"document.body.classList.toggle('summary')\">summary</button>"
+        f"{sv.THEME_BUTTON}"
         "</header>"
     )
     return (
         f'<!doctype html><html><head><meta charset="utf-8"><title>{esc(title)}</title>'
-        f"<style>{sv.CSS}</style></head><body>{backbar}"
+        f"{sv.THEME_HEAD_JS}<style>{sv.CSS}</style></head><body>{backbar}"
         f'<main>{chr(10).join(rendered)}</main></body></html>'
     )
 
