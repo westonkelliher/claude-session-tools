@@ -1,0 +1,80 @@
+/* rose — dusky plum-charcoal with a rose / gold / sage / iris accent family.
+   Third identity: not a light/dark switch but a different *accent palette*.
+   Same vibe as dark — neutral ranked surfaces, color used sparingly and
+   semantically; the character lives in the role edges, link, and tool chips. */
+--bg: #191724;
+--text: #e0def4;
+--muted: #908caa;
+--border: #2a2740;
+--topbar-bg: #1f1d2e;
+--btn-bg: #26233a;
+--btn-hover: #322f4a;
+/* Surfaces graded by importance (assistant/user brightest, tools dimmer,
+   thinking dimmest). Only user (cool) and error (warm) carry a tint. */
+--user-bg: #221f37;
+--user-edge: #9ccfd8;      /* foam — cool */
+--asst-bg: #1f1d2e;
+--asst-edge: #a3d9b1;      /* sage — content */
+--thinking-bg: #1b1928;
+--thinking-fg: #908caa;
+--tooluse-bg: #211e30;
+--tooluse-edge: #f6c177;   /* gold */
+--toolresult-bg: #1f1c2c;
+--toolresult-edge: #a39ec4; /* muted iris */
+--error-bg: #2e1d28;
+--error-edge: #eb6f92;     /* love — the only loud accent */
+--code-bg: #14121f;
+--code-fg: #e6e6e6;
+--link: #c4a7e7;           /* iris */
+--inline-code-bg: rgba(255,255,255,0.08);
+--details-bg: rgba(255,255,255,0.045);
+--result-bg: rgba(160,150,190,0.12);
+--toolsummary: #e6b673;
+--toolsummary-strong: #f3e2c6;
+--kv: #c9c5dd;
+--kv-strong: #ece9f7;
+--card: #1f1d2e;
+--proj-head: #232036;
+--row-hover: #272445;
+--hairline: rgba(255,255,255,0.06);
+--detail-summary: #908caa;
+/* Tool chips: dusky jewel tones, muted solid fills + white ink. Prominence via
+   chroma (colorful = act, gray = recede), matching dark's grading. */
+--chip-ink: rgba(255,255,255,0.95);
+--chip-bash: #3e8a9c;      /* pine   — execute  (prominent) */
+--chip-task: #c76b86;      /* rose   — agents   (prominent) */
+--chip-taskupdate: #c76b86;
+--chip-write: #5b9c78;     /* sage   — create */
+--chip-edit: #b88a4a;      /* gold   — modify */
+--chip-notebook: #8c72c0;  /* iris   — modify */
+--chip-read: #574f6f;      /* mauve-slate — read   (recede) */
+--chip-glob: #5a5278;      /* muted indigo — search (recede) */
+--chip-grep: #5a5278;
+--chip-webfetch: #586a86;  /* dusty steel — fetch (recede) */
+--chip-websearch: #586a86;
+--chip-todo: #4d4866;      /* gray */
+--chip-default: #97713f;   /* gold — unlisted */
+--font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* Spectrum chips. Carries the same ramp dark currently shows (rose inherited it
+   before themes were file-defined); tune later for a rose-specific spectrum. */
+--age-fill-fresh: rgb(190,240,60);
+--age-fill-stale: rgb(88,176,170);
+--age-text-fresh: rgb(205,250,70);
+--age-text-stale: rgb(96,180,176);
+--age-bg-a-fresh: 0.26;
+--age-bg-a-stale: 0.07;
+--age-bd-a-fresh: 0.50;
+--age-bd-a-stale: 0.00;
+--msgs-fill-lo: rgb(150,140,170);
+--msgs-fill-hi: rgb(190,150,255);
+--msgs-text-lo: rgb(150,140,170);
+--msgs-text-hi: rgb(190,150,255);
+--umsgs-fill-lo: rgb(140,150,175);
+--umsgs-fill-hi: rgb(120,175,255);
+--umsgs-text-lo: rgb(140,150,175);
+--umsgs-text-hi: rgb(120,175,255);
+--chip-bg-a-lo: 0.06;
+--chip-bg-a-hi: 0.26;
+--chip-bd-a-lo: 0.00;
+--chip-bd-a-hi: 0.50;

@@ -1,0 +1,78 @@
+/* light — warm paper. Mirrors the dark structure: neutral ranked surfaces,
+   identity via the left edge; only user (cool) and error (warm) carry a tint.
+   Assistant content rises to white; tool noise sinks slightly below the paper
+   bg. This also stops cool tool chips from clashing with a warm card. */
+--bg: #f6f6f2;
+--text: #1c1c1c;
+--muted: #6a6a6a;
+--border: #e3e3df;
+--topbar-bg: #fff;
+--btn-bg: #fff;
+--btn-hover: #f0f0eb;
+--user-bg: #eaf1fd;
+--user-edge: #2f6feb;
+--asst-bg: #e4f8da;
+--asst-edge: #1f8a4c;
+--thinking-bg: #e9e8e3;
+--thinking-fg: #444;
+--tooluse-bg: #f0f0e0;
+--tooluse-edge: #c97a17;
+--toolresult-bg: #ebebe6;
+--toolresult-edge: #5c6b85;
+--error-bg: #fce9e4;
+--error-edge: #c0392b;
+--code-bg: #2b2b2b;
+--code-fg: #f1f1f1;
+--link: #1657c0;
+--inline-code-bg: rgba(0,0,0,0.06);
+--details-bg: rgba(255,255,255,0.4);
+--result-bg: rgba(92,107,133,0.12);
+--toolsummary: #5b4517;
+--toolsummary-strong: #111;
+--kv: #333;
+--kv-strong: #111;
+--card: #fff;
+--proj-head: #fbfbf8;
+--row-hover: #eef3ff;
+--hairline: rgba(0,0,0,0.04);
+--detail-summary: #444;
+/* Light keeps the ORIGINAL (pre-dark-theme) chip palette: solid fills + white ink. */
+--chip-ink: #fff;
+--chip-bash: #485e6c;
+--chip-task: #db2777;
+--chip-taskupdate: #be185d;
+--chip-write: #1f8a4c;
+--chip-edit: #cf8a33;
+--chip-notebook: #8b5cf6;
+--chip-read: #608db2;
+--chip-glob: #7c3aed;
+--chip-grep: #6d28d9;
+--chip-webfetch: #0ea5e9;
+--chip-websearch: #0284c7;
+--chip-todo: #475569;
+--chip-default: #c97a17;
+--font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* Spectrum chips. Fills + alphas match dark (they were theme-independent before);
+   only the text is flattened to a fixed readable color (was the light !important
+   override) instead of following the ramp. */
+--age-fill-fresh: rgb(190,240,60);
+--age-fill-stale: rgb(88,176,170);
+--age-text-fresh: #147d6a;
+--age-text-stale: #147d6a;
+--age-bg-a-fresh: 0.26;
+--age-bg-a-stale: 0.07;
+--age-bd-a-fresh: 0.50;
+--age-bd-a-stale: 0.00;
+--msgs-fill-lo: rgb(150,140,170);
+--msgs-fill-hi: rgb(190,150,255);
+--msgs-text-lo: #5a1fc0;
+--msgs-text-hi: #5a1fc0;
+--umsgs-fill-lo: rgb(140,150,175);
+--umsgs-fill-hi: rgb(120,175,255);
+--umsgs-text-lo: #1f55c0;
+--umsgs-text-hi: #1f55c0;
+--chip-bg-a-lo: 0.06;
+--chip-bg-a-hi: 0.26;
+--chip-bd-a-lo: 0.00;
+--chip-bd-a-hi: 0.50;

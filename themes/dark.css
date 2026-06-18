@@ -1,0 +1,85 @@
+/* dark — cool charcoal, the default theme.
+   Loaded by session-view: these declarations are wrapped in :root / :root.dark.
+   Colors are graded so attention tracks importance: human/assistant content sits
+   on the brightest surfaces with saturated edges; tool calls/results are muted;
+   thinking is dimmest; errors are the only loud red. */
+--bg: #15171a;
+--text: #e3e3e0;
+--muted: #888e98;
+--border: #2a2e35;
+--topbar-bg: #1b1e23;
+--btn-bg: #23272e;
+--btn-hover: #2d323a;
+/* Cards share neutral surfaces raised above --bg; identity = left edge + role
+   color. Surfaces are graded by importance (human/assistant brightest, tools
+   dimmer, thinking dimmest). Only user (cool) and error (warm) carry a tint. */
+--user-bg: #1c2130;
+--user-edge: #5f97ff;
+--asst-bg: #1d2026;
+--asst-edge: #4fc97a;
+--thinking-bg: #17191d;
+--thinking-fg: #888e98;
+--tooluse-bg: #1a1d22;
+--tooluse-edge: #e0a23c;
+--toolresult-bg: #191c21;
+--toolresult-edge: #7e93b4;
+--error-bg: #2c1b18;
+--error-edge: #f2705f;
+--code-bg: #0b0c0e;
+--code-fg: #e6e6e6;
+--link: #5fa0ff;
+--inline-code-bg: rgba(255,255,255,0.09);
+--details-bg: rgba(255,255,255,0.045);
+--result-bg: rgba(120,140,170,0.12);
+--toolsummary: #d8b277;
+--toolsummary-strong: #f0e4d0;
+--kv: #b8bdc6;
+--kv-strong: #e8e8e5;
+--card: #1b1e23;
+--proj-head: #1f242b;
+--row-hover: #1d2738;
+--hairline: rgba(255,255,255,0.07);
+--detail-summary: #888e98;
+/* Tool-name chips. Dark = muted solid fills + white ink (no neon glow).
+   Same hue per tool across themes; prominence comes from chroma (colorful
+   vs gray), not loudness. Recede tools stay gray; bash/task carry hue. */
+--chip-ink: rgba(255,255,255,0.95);
+--chip-bash: #34948c;      /* teal   — execute  (prominent) */
+--chip-task: #bd6088;      /* rose   — agents   (prominent) */
+--chip-taskupdate: #bd6088;
+--chip-write: #3f8f63;     /* green  — create */
+--chip-edit: #a9803f;      /* amber  — modify */
+--chip-notebook: #7d6bbf;  /* purple — modify */
+--chip-read: #475463;      /* slate  — read   (recede) */
+--chip-glob: #4a5775;      /* indigo — search (recede) */
+--chip-grep: #4a5775;
+--chip-webfetch: #44607a;  /* steel  — fetch  (recede) */
+--chip-websearch: #44607a;
+--chip-todo: #4d586a;      /* gray */
+--chip-default: #8f7440;   /* amber — unlisted */
+--font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* Spectrum chips (session-explorer rows). The code emits only --t (ramp
+   position 0..1); these endpoints + alphas define the colors, so the spectrum
+   re-themes with the rest of the palette. age: lime (fresh) -> teal (stale);
+   msgs/umsgs: muted (low count) -> vivid (high). */
+--age-fill-fresh: rgb(190,240,60);
+--age-fill-stale: rgb(88,176,170);
+--age-text-fresh: rgb(205,250,70);
+--age-text-stale: rgb(96,180,176);
+--age-bg-a-fresh: 0.26;
+--age-bg-a-stale: 0.07;
+--age-bd-a-fresh: 0.50;
+--age-bd-a-stale: 0.00;
+--msgs-fill-lo: rgb(150,140,170);
+--msgs-fill-hi: rgb(190,150,255);
+--msgs-text-lo: rgb(150,140,170);
+--msgs-text-hi: rgb(190,150,255);
+--umsgs-fill-lo: rgb(140,150,175);
+--umsgs-fill-hi: rgb(120,175,255);
+--umsgs-text-lo: rgb(140,150,175);
+--umsgs-text-hi: rgb(120,175,255);
+--chip-bg-a-lo: 0.06;
+--chip-bg-a-hi: 0.26;
+--chip-bd-a-lo: 0.00;
+--chip-bd-a-hi: 0.50;

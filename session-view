@@ -40,167 +40,73 @@ def detect_model(entries):
             c[mid] += 1
     return c.most_common(1)[0][0] if c else None
 
-# Shared theme tokens. Dark is the default (:root); .light on <html> opts into light.
-# Colors are graded so attention tracks importance: human/assistant content sits on
-# the brightest surfaces with saturated edges; tool calls/results are muted; thinking
-# is dimmest; errors are the only loud red.
-THEME_VARS = """
-:root {
-  /* dark (default) */
-  --bg: #15171a;
-  --text: #e3e3e0;
-  --muted: #888e98;
-  --border: #2a2e35;
-  --topbar-bg: #1b1e23;
-  --btn-bg: #23272e;
-  --btn-hover: #2d323a;
-  /* Cards share neutral surfaces raised above --bg; identity = left edge + role
-     color. Surfaces are graded by importance (human/assistant brightest, tools
-     dimmer, thinking dimmest). Only user (cool) and error (warm) carry a tint. */
-  --user-bg: #1c2130;
-  --user-edge: #5f97ff;
-  --asst-bg: #1d2026;
-  --asst-edge: #4fc97a;
-  --thinking-bg: #17191d;
-  --thinking-fg: #888e98;
-  --tooluse-bg: #1a1d22;
-  --tooluse-edge: #e0a23c;
-  --toolresult-bg: #191c21;
-  --toolresult-edge: #7e93b4;
-  --error-bg: #2c1b18;
-  --error-edge: #f2705f;
-  --code-bg: #0b0c0e;
-  --code-fg: #e6e6e6;
-  --link: #5fa0ff;
-  --inline-code-bg: rgba(255,255,255,0.09);
-  --details-bg: rgba(255,255,255,0.045);
-  --result-bg: rgba(120,140,170,0.12);
-  --toolsummary: #d8b277;
-  --toolsummary-strong: #f0e4d0;
-  --kv: #b8bdc6;
-  --kv-strong: #e8e8e5;
-  --card: #1b1e23;
-  --proj-head: #1f242b;
-  --row-hover: #1d2738;
-  --hairline: rgba(255,255,255,0.07);
-  --detail-summary: #888e98;
-  /* Tool-name chips. Dark = muted solid fills + white ink (no neon glow).
-     Same hue per tool across themes; prominence comes from chroma (colorful
-     vs gray), not loudness. Recede tools stay gray; bash/task carry hue. */
-  --chip-ink: rgba(255,255,255,0.95);
-  --chip-bash: #34948c;      /* teal   — execute  (prominent) */
-  --chip-task: #bd6088;      /* rose   — agents   (prominent) */
-  --chip-taskupdate: #bd6088;
-  --chip-write: #3f8f63;     /* green  — create */
-  --chip-edit: #a9803f;      /* amber  — modify */
-  --chip-notebook: #7d6bbf;  /* purple — modify */
-  --chip-read: #475463;      /* slate  — read   (recede) */
-  --chip-glob: #4a5775;      /* indigo — search (recede) */
-  --chip-grep: #4a5775;
-  --chip-webfetch: #44607a;  /* steel  — fetch  (recede) */
-  --chip-websearch: #44607a;
-  --chip-todo: #4d586a;      /* gray */
-  --chip-default: #8f7440;   /* amber — unlisted */
-  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-:root.dim {
-  /* A softer midtone slate: same cool-neutral, ranked-surface vibe as dark,
-     lifted off near-black for lower contrast / less eye strain. Only the
-     surfaces shift; accent edges, chips and fonts inherit from dark (:root). */
-  --bg: #20242a;
-  --text: #d7dadf;
-  --muted: #8c939d;
-  --border: #353b43;
-  --topbar-bg: #262b32;
-  --btn-bg: #2d333b;
-  --btn-hover: #373e47;
-  --user-bg: #27303f;
-  --asst-bg: #272c33;
-  --thinking-bg: #22262c;
-  --thinking-fg: #8c939d;
-  --tooluse-bg: #252a30;
-  --toolresult-bg: #24282f;
-  --error-bg: #34231f;
-  --code-bg: #15171b;
-  --link: #6fa8ff;
-  --inline-code-bg: rgba(255,255,255,0.08);
-  --details-bg: rgba(255,255,255,0.04);
-  --hairline: rgba(255,255,255,0.06);
-  --card: #262b32;
-  --proj-head: #2a3038;
-  --row-hover: #2a3444;
-  --detail-summary: #8c939d;
-}
-:root.light {
-  --bg: #f6f6f2;
-  --text: #1c1c1c;
-  --muted: #6a6a6a;
-  --border: #e3e3df;
-  --topbar-bg: #fff;
-  --btn-bg: #fff;
-  --btn-hover: #f0f0eb;
-  /* Mirror the dark structure: neutral ranked surfaces, identity via the left
-     edge; only user (cool) and error (warm) carry a tint. Assistant content
-     rises to white; tool noise sinks slightly below the paper bg. This also
-     stops cool tool chips from clashing with a warm card. */
-  --user-bg: #eaf1fd;
-  --user-edge: #2f6feb;
-  --asst-bg: #ffffff;
-  --asst-edge: #1f8a4c;
-  --thinking-bg: #e9e8e3;
-  --thinking-fg: #444;
-  --tooluse-bg: #f0f0eb;
-  --tooluse-edge: #c97a17;
-  --toolresult-bg: #ebebe6;
-  --toolresult-edge: #5c6b85;
-  --error-bg: #fce9e4;
-  --error-edge: #c0392b;
-  --code-bg: #2b2b2b;
-  --code-fg: #f1f1f1;
-  --link: #1657c0;
-  --inline-code-bg: rgba(0,0,0,0.06);
-  --details-bg: rgba(255,255,255,0.4);
-  --result-bg: rgba(92,107,133,0.12);
-  --toolsummary: #5b4517;
-  --toolsummary-strong: #111;
-  --kv: #333;
-  --kv-strong: #111;
-  --card: #fff;
-  --proj-head: #fbfbf8;
-  --row-hover: #eef3ff;
-  --hairline: rgba(0,0,0,0.04);
-  --detail-summary: #444;
-  /* Light keeps the ORIGINAL (pre-dark-theme) chip palette: solid fills + white ink. */
-  --chip-ink: #fff;
-  --chip-bash: #485e6c;
-  --chip-task: #db2777;
-  --chip-taskupdate: #be185d;
-  --chip-write: #1f8a4c;
-  --chip-edit: #cf8a33;
-  --chip-notebook: #8b5cf6;
-  --chip-read: #608db2;
-  --chip-glob: #7c3aed;
-  --chip-grep: #6d28d9;
-  --chip-webfetch: #0ea5e9;
-  --chip-websearch: #0284c7;
-  --chip-todo: #475569;
-  --chip-default: #c97a17;
-}
+# ── Themes ────────────────────────────────────────────────────────────────
+# Each theme is one file: themes/<name>.css, holding only CSS custom-property
+# declarations (no selector). session-view wraps them in :root / :root.<name>,
+# so the active <html> class picks a palette. Drop in a new .css file to add a
+# theme; the toggle button cycles through whatever it finds. The baked-in
+# default below is used only when no theme files are present.
+THEME_DIR = Path(__file__).resolve().parent / "themes"
+DEFAULT_THEME = "dark"
+# Minimal self-contained fallback (cool charcoal) for installs without themes/.
+_BUILTIN_DEFAULT_CSS = """\
+--bg:#15171a; --text:#e3e3e0; --muted:#888e98; --border:#2a2e35;
+--topbar-bg:#1b1e23; --btn-bg:#23272e; --btn-hover:#2d323a;
+--user-bg:#1c2130; --user-edge:#5f97ff; --asst-bg:#1d2026; --asst-edge:#4fc97a;
+--thinking-bg:#17191d; --thinking-fg:#888e98; --tooluse-bg:#1a1d22; --tooluse-edge:#e0a23c;
+--toolresult-bg:#191c21; --toolresult-edge:#7e93b4; --error-bg:#2c1b18; --error-edge:#f2705f;
+--code-bg:#0b0c0e; --code-fg:#e6e6e6; --link:#5fa0ff;
+--inline-code-bg:rgba(255,255,255,0.09); --details-bg:rgba(255,255,255,0.045);
+--result-bg:rgba(120,140,170,0.12); --toolsummary:#d8b277; --toolsummary-strong:#f0e4d0;
+--kv:#b8bdc6; --kv-strong:#e8e8e5; --card:#1b1e23; --proj-head:#1f242b;
+--row-hover:#1d2738; --hairline:rgba(255,255,255,0.07); --detail-summary:#888e98;
+--chip-ink:rgba(255,255,255,0.95); --chip-bash:#34948c; --chip-task:#bd6088;
+--chip-taskupdate:#bd6088; --chip-write:#3f8f63; --chip-edit:#a9803f; --chip-notebook:#7d6bbf;
+--chip-read:#475463; --chip-glob:#4a5775; --chip-grep:#4a5775; --chip-webfetch:#44607a;
+--chip-websearch:#44607a; --chip-todo:#4d586a; --chip-default:#8f7440;
+--font:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 """
+
+
+def _load_themes():
+    """Read themes/*.css -> {name: declarations}. Names are the file stems
+    (lowercase slug). Falls back to the baked-in default if none are found."""
+    themes = {}
+    if THEME_DIR.is_dir():
+        for p in sorted(THEME_DIR.glob("*.css")):
+            name = p.stem.lower()
+            if re.fullmatch(r"[a-z0-9-]+", name):
+                themes[name] = p.read_text()
+    if not themes:
+        themes = {DEFAULT_THEME: _BUILTIN_DEFAULT_CSS}
+    return themes
+
+
+THEMES = _load_themes()
+# Default applies first (so it survives an unknown stored theme), and is also
+# emitted bare on :root so it paints before any class is set.
+_default = DEFAULT_THEME if DEFAULT_THEME in THEMES else sorted(THEMES)[0]
+THEME_NAMES = [_default] + sorted(n for n in THEMES if n != _default)
+THEME_VARS = "\n".join(
+    [f":root {{\n{THEMES[_default]}\n}}"]
+    + [f":root.{n} {{\n{THEMES[n]}\n}}" for n in THEME_NAMES]
+)
+# JS array of theme names, single-quoted so it's safe inside onclick="...".
+# (Names are slug-only, so no escaping is needed.)
+_NAMES_JS = "[" + ",".join("'%s'" % n for n in THEME_NAMES) + "]"
 
 # Inline <head> snippet: apply the stored theme before paint to avoid a flash.
 THEME_HEAD_JS = (
-    "<script>(function(){try{var t=localStorage.getItem('cs-theme');"
-    "if(t==='light'||t==='dim')document.documentElement.classList.add(t);}catch(e){}})();</script>"
+    "<script>(function(){try{var n=localStorage.getItem('cs-theme'),L=" + _NAMES_JS + ";"
+    "if(n&&L.indexOf(n)>=0)document.documentElement.classList.add(n);}catch(e){}})();</script>"
 )
-# A header button that cycles + persists the theme: dark -> dim -> light.
+# A header button that cycles + persists the theme through every loaded palette.
 THEME_BUTTON = (
-    "<button onclick=\"(function(){var d=document.documentElement,o=['dark','dim','light'];"
-    "var c=d.classList.contains('light')?'light':d.classList.contains('dim')?'dim':'dark';"
-    "var n=o[(o.indexOf(c)+1)%3];d.classList.remove('dim','light');"
-    "if(n!=='dark')d.classList.add(n);"
-    "try{localStorage.setItem('cs-theme',n);}catch(e){}})()\""
+    "<button onclick=\"(function(){var d=document.documentElement,L=" + _NAMES_JS + ",c='"
+    + _default + "';for(var i=0;i<L.length;i++)if(d.classList.contains(L[i]))c=L[i];"
+    "var n=L[(L.indexOf(c)+1)%L.length];for(var j=0;j<L.length;j++)d.classList.remove(L[j]);"
+    "d.classList.add(n);try{localStorage.setItem('cs-theme',n);}catch(e){}})()\""
     ">◐ theme</button>"
 )
 # Click any compact row to expand it in place (used by both the standalone

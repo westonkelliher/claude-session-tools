@@ -69,17 +69,29 @@ text-decoration:none;color:inherit}
 .row .title .sub{color:var(--muted);font-size:12px}
 .row .badge{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
 .row .branch{color:#9b6cff}
+/* Spectrum chips: each row sets only --t (ramp position 0..1) inline; the
+   endpoint colors + alphas come from the active theme (--age-*/--msgs-*/etc),
+   so the spectrum re-themes with the palette. --c = interpolated fill color;
+   alpha is applied by mixing --c with transparent (exact: a zero-alpha color
+   contributes no hue, so the result is --c at that opacity). */
 .row .age{font-family:var(--mono);font-size:11px;font-weight:600;flex:none;min-width:46px;text-align:center;
-padding:1px 8px;border-radius:999px;border:1px solid transparent;letter-spacing:.02em}
-/* newness: continuous teal (fresh) -> lime-green (stale), set inline per row */
-:root.light .row .age{color:#147d6a!important}
+padding:1px 8px;border-radius:999px;border:1px solid transparent;letter-spacing:.02em;
+--c:color-mix(in srgb,var(--age-fill-fresh) calc((1 - var(--t))*100%),var(--age-fill-stale));
+background:color-mix(in srgb,var(--c) calc(var(--age-bg-a-fresh)*100% + (var(--age-bg-a-stale) - var(--age-bg-a-fresh))*var(--t)*100%),transparent);
+border-color:color-mix(in srgb,var(--c) calc(var(--age-bd-a-fresh)*100% + (var(--age-bd-a-stale) - var(--age-bd-a-fresh))*var(--t)*100%),transparent);
+color:color-mix(in srgb,var(--age-text-fresh) calc((1 - var(--t))*100%),var(--age-text-stale))}
 .msgpair{display:inline-flex;flex:none}
 .row .msgs,.row .umsgs{font-family:var(--mono);font-size:11px;font-weight:600;flex:none;text-align:center;
-padding:1px 8px;border:1px solid transparent}
-.row .msgs{border-radius:999px 0 0 999px}
-.row .umsgs{border-radius:0 999px 999px 0;border-left:0}
-:root.light .row .msgs{color:#5a1fc0!important}
-:root.light .row .umsgs{color:#1f55c0!important}
+padding:1px 8px;border:1px solid transparent;
+background:color-mix(in srgb,var(--c) calc(var(--chip-bg-a-lo)*100% + (var(--chip-bg-a-hi) - var(--chip-bg-a-lo))*var(--t)*100%),transparent);
+border-color:color-mix(in srgb,var(--c) calc(var(--chip-bd-a-lo)*100% + (var(--chip-bd-a-hi) - var(--chip-bd-a-lo))*var(--t)*100%),transparent);
+color:var(--tc)}
+.row .msgs{border-radius:999px 0 0 999px;
+--c:color-mix(in srgb,var(--msgs-fill-lo) calc((1 - var(--t))*100%),var(--msgs-fill-hi));
+--tc:color-mix(in srgb,var(--msgs-text-lo) calc((1 - var(--t))*100%),var(--msgs-text-hi))}
+.row .umsgs{border-radius:0 999px 999px 0;border-left:0;
+--c:color-mix(in srgb,var(--umsgs-fill-lo) calc((1 - var(--t))*100%),var(--umsgs-fill-hi));
+--tc:color-mix(in srgb,var(--umsgs-text-lo) calc((1 - var(--t))*100%),var(--umsgs-text-hi))}
 .more{display:block;width:100%;text-align:left;padding:4px 14px;border:0;border-top:1px solid var(--border);
 background:var(--proj-head);color:var(--link);font:inherit;font-size:12px;cursor:pointer}
 .more:hover{background:var(--row-hover)}
@@ -105,14 +117,12 @@ def rel_age(ts):
     return "now"
 
 
-def chip_style(n, dim, bright, cap):
-    """Muted-gray-tinted (low) -> vivid (high) ramp; max reached at `cap`."""
-    t = min(1.0, math.sqrt(max(n, 0)) / math.sqrt(cap))
-    L = lambda i: dim[i] + (bright[i] - dim[i]) * t
-    r, g, b = L(0), L(1), L(2)
-    return (f"background:rgba({r:.0f},{g:.0f},{b:.0f},{0.06 + 0.20 * t:.3f});"
-            f"border-color:rgba({r:.0f},{g:.0f},{b:.0f},{0.50 * t:.3f});"
-            f"color:rgb({r:.0f},{g:.0f},{b:.0f})")
+# The spectrum chips only emit their ramp *position* (--t, 0..1); the colors and
+# alphas live in the theme files (--age-*/--msgs-*/--umsgs-*/--chip-*), so the
+# browser interpolates them per active theme. See INDEX_CSS for the color-mix.
+def chip_t(n, cap):
+    """Position 0..1 along the count ramp; the max (vivid end) is reached at `cap`."""
+    return min(1.0, math.sqrt(max(n, 0)) / math.sqrt(cap))
 
 
 # Anchors mapped to evenly spaced positions so these ages are equally
@@ -121,27 +131,25 @@ _AGE_ANCHORS = [(120, 0.0), (1200, 0.2), (28800, 0.4),
                 (86400, 0.6), (259200, 0.8), (691200, 1.0)]
 
 
-def age_style(ts):
-    """Continuous lime-green (fresh) -> teal (stale) ramp."""
+def age_t(ts):
+    """Position 0..1 along the freshness ramp (fresh -> stale), piecewise-linear
+    in log(age). Returns None when there's no timestamp."""
     if not ts:
-        return ""
+        return None
     d = max(time.time() - ts, 1)
     ld = math.log(d)
-    t = _AGE_ANCHORS[-1][1]
     if ld <= math.log(_AGE_ANCHORS[0][0]):
-        t = 0.0
-    else:
-        for (s0, t0), (s1, t1) in zip(_AGE_ANCHORS, _AGE_ANCHORS[1:]):
-            if ld <= math.log(s1):
-                l0, l1 = math.log(s0), math.log(s1)
-                t = t0 + (t1 - t0) * (ld - l0) / (l1 - l0)
-                break
-    lerp = lambda a, b: a + (b - a) * t
-    r, g, b = lerp(190, 88), lerp(240, 176), lerp(60, 170)
-    tr, tg, tb = lerp(205, 96), lerp(250, 180), lerp(70, 176)
-    return (f"background:rgba({r:.0f},{g:.0f},{b:.0f},{lerp(0.26, 0.07):.3f});"
-            f"border-color:rgba({r:.0f},{g:.0f},{b:.0f},{lerp(0.50, 0.0):.3f});"
-            f"color:rgb({tr:.0f},{tg:.0f},{tb:.0f})")
+        return 0.0
+    for (s0, t0), (s1, t1) in zip(_AGE_ANCHORS, _AGE_ANCHORS[1:]):
+        if ld <= math.log(s1):
+            l0, l1 = math.log(s0), math.log(s1)
+            return t0 + (t1 - t0) * (ld - l0) / (l1 - l0)
+    return _AGE_ANCHORS[-1][1]
+
+
+def t_var(t):
+    """Inline custom property carrying a ramp position, or '' when absent."""
+    return "" if t is None else f"--t:{t:.4f}"
 
 
 def first_human_prompt(text):
@@ -281,12 +289,12 @@ def render_index():
                 + "</span>"
                 f'{branch}{gbadge}'
                 f'<span class="msgpair">'
-                f'<span class="msgs" style="{chip_style(m["msgs"], (150,140,170), (190,150,255), 300)}" '
+                f'<span class="msgs" style="{t_var(chip_t(m["msgs"], 300))}" '
                 f'title="total messages">{m["msgs"]} msg</span>'
-                f'<span class="umsgs" style="{chip_style(m["user_msgs"], (140,150,175), (120,175,255), 30)}" '
+                f'<span class="umsgs" style="{t_var(chip_t(m["user_msgs"], 30))}" '
                 f'title="user messages">{m["user_msgs"]} usr</span>'
                 f'</span>'
-                f'<span class="age" style="{age_style(m["last_ts"])}">'
+                f'<span class="age" style="{t_var(age_t(m["last_ts"]))}">'
                 f'{esc(rel_age(m["last_ts"]))}</span>'
                 "</a>"
             )
