@@ -30,25 +30,25 @@ THEME_VARS = """
   --topbar-bg: #1b1e23;
   --btn-bg: #23272e;
   --btn-hover: #2d323a;
-  --user-bg: #172339;
-  --user-edge: #4f8bff;
-  --asst-bg: #16271d;
-  --asst-edge: #3bc46f;
-  --thinking-bg: #1c1f24;
+  --user-bg: #1a2740;
+  --user-edge: #5f97ff;
+  --asst-bg: #172a1f;
+  --asst-edge: #46cf78;
+  --thinking-bg: #191b20;
   --thinking-fg: #9aa0aa;
-  --tooluse-bg: #2a2212;
-  --tooluse-edge: #d4912f;
-  --toolresult-bg: #1c2128;
-  --toolresult-edge: #6f819e;
-  --error-bg: #341b18;
-  --error-edge: #e5594a;
+  --tooluse-bg: #1f2023;
+  --tooluse-edge: #e3a23c;
+  --toolresult-bg: #1d2128;
+  --toolresult-edge: #8b9cb8;
+  --error-bg: #3a1d19;
+  --error-edge: #f2705f;
   --code-bg: #0d0e10;
   --code-fg: #e6e6e6;
   --link: #5fa0ff;
   --inline-code-bg: rgba(255,255,255,0.09);
   --details-bg: rgba(255,255,255,0.045);
   --result-bg: rgba(120,140,170,0.12);
-  --toolsummary: #c9a877;
+  --toolsummary: #d8b277;
   --toolsummary-strong: #f0e4d0;
   --kv: #b8bdc6;
   --kv-strong: #e8e8e5;
@@ -143,7 +143,8 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
 .role { text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; font-size: 11px; }
 .ts { color: var(--muted); font-size: 11px; font-family: var(--mono); }
 
-.card.user { background: var(--user-bg); border-left-color: var(--user-edge); }
+.card.user { background: var(--user-bg); border-left-color: var(--user-edge); margin-top: 26px; }
+.card.user:first-child { margin-top: 10px; }
 .card.user .role { color: var(--user-edge); }
 .card.assistant { background: var(--asst-bg); border-left-color: var(--asst-edge); }
 .card.assistant .role { color: var(--asst-edge); }
@@ -157,7 +158,7 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
 .card.tool .role { color: var(--tooluse-edge); }
 .card.tool .toolhead { font-family: var(--mono); font-size: 13px; margin-bottom: 6px; word-break: break-all; }
 .card.tool .toolhead .name {
-  display: inline-block; background: var(--tooluse-edge); color: #fff;
+  display: inline-block; background: #a8761f; color: #fff;
   font-size: 12px; padding: 1px 7px; border-radius: 3px; margin-right: 8px;
   font-weight: 600;
 }
@@ -166,17 +167,17 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
 .card.tool .toolhead .name.tool-edit         { background: #c97a17; }
 .card.tool .toolhead .name.tool-read         { background: #4a7da8; }
 .card.tool .toolhead .name.tool-notebookedit { background: #8b5cf6; }
-.card.tool .toolhead .name.tool-glob         { background: #7c3aed; }
-.card.tool .toolhead .name.tool-grep         { background: #6d28d9; }
-.card.tool .toolhead .name.tool-webfetch     { background: #0ea5e9; }
-.card.tool .toolhead .name.tool-websearch    { background: #0284c7; }
+.card.tool .toolhead .name.tool-glob         { background: #5b6ad6; }
+.card.tool .toolhead .name.tool-grep         { background: #5b6ad6; }
+.card.tool .toolhead .name.tool-webfetch     { background: #0e8fcf; }
+.card.tool .toolhead .name.tool-websearch    { background: #0e8fcf; }
 .card.tool .toolhead .name.tool-task         { background: #db2777; }
 .card.tool .toolhead .name.tool-todowrite    { background: #475569; }
 .card.tool .toolhead .name.tool-taskcreate   { background: #db2777; }
-.card.tool .toolhead .name.tool-taskupdate   { background: #be185d; }
+.card.tool .toolhead .name.tool-taskupdate   { background: #db2777; }
 .card.tool .toolhead .toolsummary { color: var(--toolsummary); }
 .card.tool .toolhead .toolsummary strong {
-  background: var(--tooluse-edge);
+  background: #a8761f;
   color: #fff;
   padding: 0 5px;
   border-radius: 3px;
@@ -248,6 +249,8 @@ details > summary { user-select: none; }
 body.summary main { padding-top: 12px; }
 body.summary .card { margin: 0; padding: 2px 8px; border-radius: 0; border-top-width: 0; border-bottom-width: 0; border-left-width: 4px; }
 body.summary .card + .card { border-top: 1px solid var(--hairline); }
+body.summary .card.user { margin-top: 22px; }
+body.summary .card.user:first-child { margin-top: 0; }
 body.summary .card-header { display: none; }
 body.summary .md p { margin: 2px 0; }
 body.summary .thinking { padding: 2px 8px; margin: 2px 0; }
@@ -589,14 +592,13 @@ def main():
 {THEME_HEAD_JS}
 <style>{CSS}</style>
 </head>
-<body>
+<body class="summary">
 <header class="topbar">
   <span class="name">{esc(title)}</span>
   <span class="stats">{turn_count} role turns • {tool_count} tool calls</span>
   <span class="spacer"></span>
   <button onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">expand all</button>
   <button onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">collapse all</button>
-  <button onclick="document.body.classList.toggle('summary')">summary</button>
   {THEME_BUTTON}
 </header>
 <main>
