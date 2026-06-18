@@ -104,6 +104,34 @@ THEME_VARS = """
   --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+:root.dim {
+  /* A softer midtone slate: same cool-neutral, ranked-surface vibe as dark,
+     lifted off near-black for lower contrast / less eye strain. Only the
+     surfaces shift; accent edges, chips and fonts inherit from dark (:root). */
+  --bg: #20242a;
+  --text: #d7dadf;
+  --muted: #8c939d;
+  --border: #353b43;
+  --topbar-bg: #262b32;
+  --btn-bg: #2d333b;
+  --btn-hover: #373e47;
+  --user-bg: #27303f;
+  --asst-bg: #272c33;
+  --thinking-bg: #22262c;
+  --thinking-fg: #8c939d;
+  --tooluse-bg: #252a30;
+  --toolresult-bg: #24282f;
+  --error-bg: #34231f;
+  --code-bg: #15171b;
+  --link: #6fa8ff;
+  --inline-code-bg: rgba(255,255,255,0.08);
+  --details-bg: rgba(255,255,255,0.04);
+  --hairline: rgba(255,255,255,0.06);
+  --card: #262b32;
+  --proj-head: #2a3038;
+  --row-hover: #2a3444;
+  --detail-summary: #8c939d;
+}
 :root.light {
   --bg: #f6f6f2;
   --text: #1c1c1c;
@@ -164,12 +192,15 @@ THEME_VARS = """
 # Inline <head> snippet: apply the stored theme before paint to avoid a flash.
 THEME_HEAD_JS = (
     "<script>(function(){try{var t=localStorage.getItem('cs-theme');"
-    "if(t==='light')document.documentElement.classList.add('light');}catch(e){}})();</script>"
+    "if(t==='light'||t==='dim')document.documentElement.classList.add(t);}catch(e){}})();</script>"
 )
-# A header button that toggles + persists the theme.
+# A header button that cycles + persists the theme: dark -> dim -> light.
 THEME_BUTTON = (
-    "<button onclick=\"(function(){var d=document.documentElement;d.classList.toggle('light');"
-    "try{localStorage.setItem('cs-theme',d.classList.contains('light')?'light':'dark');}catch(e){}})()\""
+    "<button onclick=\"(function(){var d=document.documentElement,o=['dark','dim','light'];"
+    "var c=d.classList.contains('light')?'light':d.classList.contains('dim')?'dim':'dark';"
+    "var n=o[(o.indexOf(c)+1)%3];d.classList.remove('dim','light');"
+    "if(n!=='dark')d.classList.add(n);"
+    "try{localStorage.setItem('cs-theme',n);}catch(e){}})()\""
     ">◐ theme</button>"
 )
 # Click any compact row to expand it in place (used by both the standalone
